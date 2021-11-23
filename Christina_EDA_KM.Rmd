@@ -1,0 +1,257 @@
+---
+title: "Christina_EDA_KM"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(survival)
+library(survminer)
+library(tidyverse)
+library(kableExtra)
+```
+
+```{r}
+
+rotterdam
+
+
+description = c("Patient Identifier","Year of Surgery","Age at Surgery","Menopausal Status (0= premenopausal, 1= postmenopausal)","Tumor Size, a factor with levels <=20 20-50 >50","Differentiation Grade","Number of Positive Lymph Nodes","Progesterone Receptors (fmol/l)","Estrogen Receptors (fmol/l)","Hormonal Treatment (0=no, 1=yes)","Chemotherapy Treatment (0=no, 1=yes)","Days to Relapse or Last Follow-up","0= no relapse, 1= relapse","Days to Death or last Follow-up","0= alive, 1= dead")
+
+
+variable = c("pid","year","age","meno","size","grade","nodes","pgr","er","hormon","chemo","rtime","recur","dtime","death")
+
+
+data.frame(cbind(variable, description)) %>%
+  kable(caption = '',
+        col.names = c("Variable Name","Description"))%>% kable_classic(full_width = T,                                                       html_font = "Ariel")%>% 
+  column_spec (1:2,
+               border_left = T, 
+               border_right = T)
+
+
+
+```
+
+
+```{r}
+
+rot1 = rotterdam
+#first use tmerge to set stopping time
+rot2 <- tmerge(rot1, rot1, pid, tstop=dtime)
+
+#set time to relapse
+rot2 <- tmerge(rot2, rot1, pid, relapse = tdc(rtime))
+
+
+
+#status at the end, either they had an infection or they were censored
+status <- as.integer(with(rot2, (tstop == dtime & death)))
+
+#put together
+rot2 <- data.frame(rot2,status)
+
+rot2$relapse = as.factor(rot2$relapse)
+
+rot1[c(4,6,10,11)] = sapply(rot1[c(4,6,10,11)], as.factor)
+
+```
+
+
+```{r}
+sur_ob = Surv(time=rot1$dtime,
+              event=rot1$death)
+
+sur_cov <- Surv(time=rot2$tstart,
+                time2=rot2$tstop,
+                event=rot2$status,
+                type="counting")
+```
+
+
+```{r}
+km_chemo = survfit(sur_ob ~ (chemo), 
+             rot1,
+             conf.int = 0.95)
+
+km_hormon = survfit(sur_ob ~ (hormon), 
+             rot1,
+             conf.int = 0.95)
+
+km_meno = survfit(sur_ob ~ (meno), 
+             rot1,
+             conf.int = 0.95)
+
+km_size = survfit(sur_ob ~ (size), 
+             rot1,
+             conf.int = 0.95)
+km_grade = survfit(sur_ob ~ (grade), 
+             rot1,
+             conf.int = 0.95)
+
+g_km_chemo = ggsurvplot(km_chemo,censor=F,
+           conf.int=T,
+           pval=T,
+           legend.labs= c("No Chemo","Chemo"))+
+  labs(y="Prob. Survival",
+       x="Time in Days",
+       title ="Chemo Treatment Groups")+ 
+  theme_survminer(font.x  = c(14),
+                  font.y  = c(14),
+                  font.main = 14,
+                  font.legend = c(8),
+                  legend = "top") 
+
+g_km_chemo
+
+g_km_hormon  = ggsurvplot(km_hormon,censor=F,
+           conf.int=T,
+           pval=T,
+           legend.labs= c("No Hormones","Hormone Therapy"))+
+  labs(y="Prob. Survival",
+       x="Time in Days",
+       title ="Hormonal Therapy")+ 
+  theme_survminer(font.x  = c(14),
+                  font.y  = c(14),
+                  font.main = 14,
+                  font.legend = c(8),
+                  legend = "top")
+g_km_hormon
+
+
+
+g_km_meno  = ggsurvplot(km_meno,censor=F,
+           conf.int=T,
+           pval=T,
+           legend.labs= c("Premenopausal","Postmenopausal"))+
+  labs(y="Prob. Survival",
+       x="Time in Days",
+       title ="Menopausal Status")+ 
+  theme_survminer(font.x  = c(14),
+                  font.y  = c(14),
+                  font.main = 14,
+                  font.legend = c(8),
+                  legend = "top")
+g_km_meno
+
+
+g_km_size  = ggsurvplot(km_size,censor=F,
+           conf.int=T,
+           pval=T,
+           legend.labs= c("<= 20","20-50",">50"))+
+  labs(y="Prob. Survival",
+       x="Time in Days",
+       title ="Tumor Size")+ 
+  theme_survminer(font.x  = c(14),
+                  font.y  = c(14),
+                  font.main = 14,
+                  font.legend = c(8),
+                  legend = "top")
+g_km_size
+
+
+
+g_km_grade  = ggsurvplot(km_grade,censor=F,
+           conf.int=T,
+           pval=T,
+           legend.labs= c("Grade 2: Moderate", "Grade 3: High"))+
+  labs(y="Prob. Survival",
+       x="Time in Days",
+       title ="Cancer Cell Grade Differentiation")+ 
+  theme_survminer(font.x  = c(14),
+                  font.y  = c(14),
+                  font.main = 14,
+                  font.legend = c(8),
+                  legend = "top")
+g_km_grade
+
+
+```
+
+
+```{r}
+cumhaz_chemo = ggsurvplot(km_chemo, 
+           fun="cumhaz", 
+           conf.int = T,
+           censor=F,
+           legend.labs= c("No Chemo","Chemo"))+
+  labs(x="Time in Days",
+       y="Cumulative Hazard",
+       title="Cumulative Hazard")+ 
+  theme_survminer(font.x  = c(10),
+                  font.y  = c(10),
+                  font.main = 10,
+                  font.legend = c(10),
+                  legend = "top")
+
+
+
+
+clog_chemo = ggsurvplot(km_chemo, 
+           fun="cloglog",
+           conf.int = F,
+           censor=F,
+           legend.labs= c("No Chemo","Chemo"))+
+  labs(x="Time in Days",
+       y="CLogLog Hazard",
+       title="CLogLog Hazard")+ 
+  theme_survminer(font.x  = c(10),
+                  font.y  = c(10),
+                  font.main = 10,
+                  font.legend = c(8),
+                  legend = "top")
+
+
+
+arrange_ggsurvplots(list(clog_chemo,cumhaz_chemo),
+                    nrow = 1,
+                    title = "Figure X:")
+
+
+```
+
+
+
+```{r}
+rot.cox.full <- coxph(sur_cov~(year+age+meno+chemo+hormon+size+grade+relapse)**2,data=rot2)
+
+
+
+backwards.aic <- stepAIC(rot.cox.full,
+                             direction = "both",
+                             k=log(nrow(rot1)),
+                             trace=F)
+
+summary(backwards.aic)
+
+
+
+
+#rot.cox.full.str <- #coxph(sur_ob~(age+meno+strata(chemo)+hormon+size+grade+nodes+pgr+er+a#ge),data=rot1)
+#
+#
+#
+#backwards.aic.str <- stepAIC(rot.cox.full.str,
+#                             direction = "backward",
+#                             k=2,
+#                             trace=F)
+#
+#summary(backwards.aic.str)
+```
+
+
+```{r}
+
+burn.cox.full.cov <- coxph(sur_cov~(age+meno+strata(chemo)+hormon+size+grade+nodes+pgr+er+age+relapse),data=rot2)
+
+
+
+backwards.cov.aic <- stepAIC(burn.cox.full.cov,
+                             direction = "backward",
+                             k=,
+                             trace=F)
+
+summary(backwards.cov.aic)
+```
+
+
